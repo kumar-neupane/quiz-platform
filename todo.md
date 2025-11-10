@@ -2,26 +2,25 @@
 
 ## Core Features
 - [x] Database schema for quizzes, questions, and user responses
-- [x] PDF/DOC file upload endpoint for providers
+- [x] Automated PDF folder monitoring and processing
 - [x] PDF text extraction service (pdf-parse)
 - [x] Question parsing and structuring from extracted text
 - [x] Quiz creation and storage in database
-- [x] Quiz listing and management interface for providers
+- [x] Public-only quiz listing interface (no uploads/admin)
 - [x] Quiz taking interface with timer functionality
 - [x] Multiple-choice question rendering
 - [x] Answer submission and validation
 - [x] Score calculation and results display
 - [x] Results history and reporting for users
-- [ ] Provider dashboard with quiz analytics
-- [ ] Integration with Kumar Neupane website as QUIZ tab
+- [x] Remove provider dashboard from public interface
+- [x] Create CLI/script for manual PDF processing
 
 ## UI/UX Components
-- [ ] Provider dashboard layout
-- [ ] File upload form (PDF/DOC)
-- [ ] Quiz list view for providers
-- [ ] Quiz edit/preview interface
-- [ ] Quiz taking interface with timer
-- [ ] Question display component
+- [x] Provider dashboard layout
+- [x] Public quiz listing page (simplified)
+- [x] Quiz taking interface
+- [x] Quiz results page
+- [x] Home/landing page
 - [ ] Answer selection component
 - [ ] Results summary page
 - [ ] Results detail page with answer review
