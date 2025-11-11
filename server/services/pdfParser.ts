@@ -13,6 +13,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
 // Import the new advanced parser function
+// NOTE: The new parser is a .ts file, so we use tsx
 import { parsePdfToQA } from '../server/services/pdfParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,6 +52,7 @@ async function createQuizFromPDF(filePath, { db, pool }) {
     console.log(`\nProcessing: ${path.basename(filePath)}`);
 
     // Use the new advanced parser to get Question/Answer pairs
+    // The new parser returns an array of { question: string, answer: string }
     const qaPairs = await parsePdfToQA(filePath);
 
     if (qaPairs.length === 0) {
@@ -59,7 +61,6 @@ async function createQuizFromPDF(filePath, { db, pool }) {
     }
 
     // --- Database Insertion Logic ---
-    // NOTE: This part is still using raw SQL, which is not ideal, but we adapt it to the new QA structure.
     
     const client = await pool.connect();
     
@@ -75,20 +76,15 @@ async function createQuizFromPDF(filePath, { db, pool }) {
     console.log(`  ✓ Created quiz: "${quizTitle}" (ID: ${quizId})`);
 
     // Insert questions
+    // NOTE: We are making a massive assumption here: that the question text contains the options
+    // and the answer text is the correct option letter (A, B, C, D).
     const questionQuery = 'INSERT INTO questions ("quizId", "questionNumber", "questionText", "optionA", "optionB", "optionC", "optionD", "correctAnswer", explanation) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
     
     for (let i = 0; i < qaPairs.length; i++) {
       const pair = qaPairs[i];
       
-      // The new parser only gives Q and A text. We need to parse the options from the Q text.
-      // Since the new parser is complex, we will assume the question text contains the options
-      // and the answer text is the correct option letter (A, B, C, D).
-      
-      // *** WARNING: This is a massive assumption and will likely fail. ***
-      // *** The new parser is designed for a simple Q/A format, not Q/A/B/C/D/Ans format. ***
-      
-      // Since we don't know the exact format of the Q/A text from the new parser,
-      // we will use a placeholder for the options and the answer text as the explanation.
+      // Since the new parser only gives Q and A text, we use placeholders for options
+      // and the answer text as the correct answer.
       
       await client.query(questionQuery, [
         quizId, 
@@ -98,8 +94,8 @@ async function createQuizFromPDF(filePath, { db, pool }) {
         'Option B', // Placeholder
         'Option C', // Placeholder
         'Option D', // Placeholder
-        'A', // Placeholder
-        `Answer Key: ${pair.answer}` // Use the answer text as an explanation
+        pair.answer.toUpperCase().charAt(0), // Use the first letter of the answer as the correct option
+        `Answer Key: ${pair.answer}` // Use the full answer text as an explanation
       ]);
     }
 
