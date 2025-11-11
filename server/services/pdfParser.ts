@@ -11,7 +11,7 @@ export interface ParsedQuestion {
   optionB: string;
   optionC: string;
   optionD: string;
-  correctAnswer: 'A' | 'B' | 'C' | 'D';
+  correctAnswer: 'A' | 'B' | 'C' | 'D' | null; // Corrected to allow null
 }
 
 /**
@@ -36,10 +36,10 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
  * Parse extracted text into structured questions
  * This parser looks for patterns like:
  * 1. Question text
- * a. Option A
- * b. Option B
- * c. Option C
- * d. Option D
+ * a Option A (Modified to be more flexible)
+ * b Option B
+ * c Option C
+ * d Option D
  * 
  * @param text - Raw text extracted from PDF
  * @returns Array of parsed questions
@@ -59,14 +59,15 @@ export function parseQuestionsFromText(text: string): ParsedQuestion[] {
     // Check if line starts with a number followed by period (question number)
     const questionMatch = line.match(/^(\d+)\.\s+(.+)$/);
     if (questionMatch) {
-      // Save previous question if valid
+      // Save previous question if valid (only requires all options to be present)
       if (currentQuestion && 
           currentQuestion.questionText && 
           currentQuestion.optionA && 
           currentQuestion.optionB && 
           currentQuestion.optionC && 
-          currentQuestion.optionD &&
-          currentQuestion.correctAnswer) {
+          currentQuestion.optionD) {
+        // Set correctAnswer to null if not found
+        currentQuestion.correctAnswer = currentQuestion.correctAnswer || null;
         questions.push(currentQuestion as ParsedQuestion);
       }
       
@@ -79,9 +80,10 @@ export function parseQuestionsFromText(text: string): ParsedQuestion[] {
       continue;
     }
     
-    // Check for options (a., b., c., d.)
-    if (currentQuestion && !currentQuestion.correctAnswer) {
-      const optionMatch = line.match(/^([a-d])\.\s+(.+)$/i);
+    // Check for options (a, b, c, d) - MODIFIED REGEX
+    if (currentQuestion && optionCount < 4) {
+      // Matches: a. Option Text OR a Option Text
+      const optionMatch = line.match(/^([a-d])[\.\s]+\s*(.+)$/i);
       if (optionMatch) {
         const optionLetter = optionMatch[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
         const optionText = optionMatch[2];
@@ -102,7 +104,7 @@ export function parseQuestionsFromText(text: string): ParsedQuestion[] {
       }
     }
     
-    // Check for answer indicator (Answer: A or similar)
+    // Check for answer indicator (Answer: A or similar) - RETAINED FOR FUTURE USE
     if (currentQuestion && optionCount === 4 && !currentQuestion.correctAnswer) {
       const answerMatch = line.match(/^(?:Answer|Ans|Correct Answer|Answer:)[\s:]*([A-D])/i);
       if (answerMatch) {
@@ -111,14 +113,15 @@ export function parseQuestionsFromText(text: string): ParsedQuestion[] {
     }
   }
   
-  // Add last question if valid
+  // Add last question if valid (only requires all options to be present)
   if (currentQuestion && 
       currentQuestion.questionText && 
       currentQuestion.optionA && 
       currentQuestion.optionB && 
       currentQuestion.optionC && 
-      currentQuestion.optionD &&
-      currentQuestion.correctAnswer) {
+      currentQuestion.optionD) {
+    // Set correctAnswer to null if not found
+    currentQuestion.correctAnswer = currentQuestion.correctAnswer || null;
     questions.push(currentQuestion as ParsedQuestion);
   }
   
