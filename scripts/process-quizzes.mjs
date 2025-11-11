@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
-import "dotenv/config";/**
+/**
  * Process PDFs from quizzes-source folder and create quizzes in the database
  * Usage: node scripts/process-quizzes.mjs
  */
 
+import "dotenv/config"; // Load .env file
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { drizzle } from 'drizzle-orm/node-postgres'; // Import the correct Drizzle driver
-import { Pool } from 'pg'; // Import the PostgreSQL client
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 
-// Import the PDF parser
-import { extractQuestionsFromPDF, parseQuestionsFromText } from '../server/services/pdfParser.js';
+// Import the new advanced parser function
+// NOTE: The new parser is a .ts file, so we use tsx
+import { parsePdfToQA } from '../server/services/pdfParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,18 +34,15 @@ async function ensureDirectories() {
 }
 
 async function getDatabase() {
-  // Use the DATABASE_URL from the environment variable
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL environment variable is not set. Please create a .env file.");
   }
 
-  // Create a PostgreSQL pool
   const pool = new Pool({
     connectionString: connectionString,
   });
 
-  // Create a Drizzle connection
   const db = drizzle(pool);
   return { db, pool };
 }
@@ -52,39 +51,57 @@ async function createQuizFromPDF(filePath, { db, pool }) {
   try {
     console.log(`\nProcessing: ${path.basename(filePath)}`);
 
-    // Extract questions from PDF
-    const questions = await extractQuestionsFromPDF(filePath);
+    // Use the new advanced parser to get Question/Answer pairs
+    // The new parser returns an array of { question: string, answer: string }
+    const qaPairs = await parsePdfToQA(filePath);
 
-    if (questions.length === 0) {
-      console.warn(`  ⚠️  No questions extracted from ${path.basename(filePath)}`);
+    if (qaPairs.length === 0) {
+      console.warn(`  ⚠️  No question/answer pairs extracted from ${path.basename(filePath)}`);
       return false;
     }
 
+    // --- Database Insertion Logic ---
+    
+    const client = await pool.connect();
+    
     // Create quiz title from filename
     const fileName = path.basename(filePath, '.pdf');
     const quizTitle = fileName.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-    // --- Drizzle ORM Insert Logic (Simplified for raw SQL) ---
-    
-    const client = await pool.connect();
-    
     // Insert quiz
     const quizQuery = 'INSERT INTO quizzes (title, description, "totalQuestions", "timeLimit", "passingScore", "isPublished", "providerId") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id';
-    const quizResult = await client.query(quizQuery, [quizTitle, `Quiz from ${fileName}`, questions.length, 3600, 50, true, 1]);
+    const quizResult = await client.query(quizQuery, [quizTitle, `Quiz from ${fileName}`, qaPairs.length, 3600, 50, true, 1]);
     
     const quizId = quizResult.rows[0].id;
     console.log(`  ✓ Created quiz: "${quizTitle}" (ID: ${quizId})`);
 
     // Insert questions
+    // NOTE: We are making a massive assumption here: that the question text contains the options
+    // and the answer text is the correct option letter (A, B, C, D).
     const questionQuery = 'INSERT INTO questions ("quizId", "questionNumber", "questionText", "optionA", "optionB", "optionC", "optionD", "correctAnswer", explanation) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      await client.query(questionQuery, [quizId, i + 1, q.questionText, q.optionA, q.optionB, q.optionC, q.optionD, q.correctAnswer, '']);
+    
+    for (let i = 0; i < qaPairs.length; i++) {
+      const pair = qaPairs[i];
+      
+      // Since the new parser only gives Q and A text, we use placeholders for options
+      // and the answer text is the correct option letter.
+      
+      await client.query(questionQuery, [
+        quizId, 
+        i + 1, 
+        pair.question, 
+        'Option A', // Placeholder
+        'Option B', // Placeholder
+        'Option C', // Placeholder
+        'Option D', // Placeholder
+        pair.answer.toUpperCase().charAt(0), // Use the first letter of the answer as the correct option
+        `Answer Key: ${pair.answer}` // Use the full answer text as an explanation
+      ]);
     }
 
     client.release();
     
-    console.log(`  ✓ Added ${questions.length} questions`);
+    console.log(`  ✓ Added ${qaPairs.length} questions`);
 
     // Move file to processed folder
     const processedPath = path.join(PROCESSED_DIR, path.basename(filePath));
@@ -105,20 +122,15 @@ async function main() {
 
     await ensureDirectories();
 
-    // Get PDF files from quizzes-source
     const files = fs.readdirSync(QUIZZES_SOURCE_DIR).filter(f => f.toLowerCase().endsWith('.pdf'));
 
     if (files.length === 0) {
       console.log(`No PDF files found in ${QUIZZES_SOURCE_DIR}`);
-      console.log(`\nTo create quizzes:`);
-      console.log(`1. Place PDF files in: ${QUIZZES_SOURCE_DIR}`);
-      console.log(`2. Run this script again`);
       return;
     }
 
     console.log(`Found ${files.length} PDF file(s) to process\n`);
 
-    // Connect to database
     const { db, pool } = await getDatabase();
 
     let successCount = 0;
