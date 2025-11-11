@@ -1,0 +1,43 @@
+name: Parse PDFs to DB (Gemini)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "quizzes-source/**/*.pdf"
+      - "server/services/pdfParser.ts"
+      - "scripts/process-quizzes.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  workflow_dispatch: {}
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Use pnpm since your repo uses pnpm-lock.yaml
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install
+
+      # Optional: serialize calls to avoid hitting Gemini quota too fast
+      # You can read this env in your script if you add throttling.
+      - name: Process PDFs with Gemini
+        run: pnpm run process:ci
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # GEMINI_CONCURRENCY: "1"
