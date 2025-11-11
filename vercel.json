@@ -4,19 +4,6 @@
   "installCommand": "pnpm install",
   "framework": "vite",
   "outputDirectory": "dist",
-  "env": {
-    "DATABASE_URL": {
-      "description": "MySQL/PostgreSQL connection string",
-      "required": false
-    },
-    "JWT_SECRET": {
-      "description": "Secret key for JWT tokens",
-      "required": false
-    },
-    "NODE_ENV": {
-      "default": "production"
-    }
-  },
   "functions": {
     "server/_core/index.ts": {
       "runtime": "nodejs18.x",
